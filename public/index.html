@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jeu Réseau avec Three.js</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+    </style>
+</head>
+
+<body>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Connexion au serveur Socket.IO
+        const socket = io();
+
+
+        // Création de la scène Three.js
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+
+        // Création d'un plan au sol
+        const geometry = new THREE.PlaneGeometry(30, 20);
+        const material = new THREE.MeshBasicMaterial({ color: 0x006400, side: THREE.DoubleSide });
+        const plane = new THREE.Mesh(geometry, material);
+        plane.rotation.x = Math.PI / 2;
+        scene.add(plane);
+
+        // Création des murs
+        const wallGeometry = new THREE.PlaneGeometry(30, 5);
+        const wallMaterial = new THREE.MeshBasicMaterial({ color: 0x808080, side: THREE.DoubleSide });
+
+        // Mur arrière
+        const backWall = new THREE.Mesh(wallGeometry, wallMaterial);
+        backWall.position.set(0, 2.5, -10);
+        scene.add(backWall);
+
+        // Mur frontal
+        const frontWall = new THREE.Mesh(wallGeometry, wallMaterial);
+        frontWall.position.set(0, 2.5, 10);
+        scene.add(frontWall);
+
+        wallGeometrySide = new THREE.PlaneGeometry(20, 5); // Changement dû au sol rectangulaire
+
+        // Mur gauche
+        const leftWall = new THREE.Mesh(wallGeometrySide, wallMaterial);
+        leftWall.rotation.y = -Math.PI / 2;
+        leftWall.position.set(-15, 2.5, 0);
+        scene.add(leftWall);
+
+        // Mur droite
+        const rightWall = new THREE.Mesh(wallGeometrySide, wallMaterial);
+        rightWall.rotation.y = Math.PI / 2;
+        rightWall.position.set(15, 2.5, 0);
+        scene.add(rightWall);
+
+        // Création d'une sphère
+        const sphereGeometry = new THREE.SphereGeometry(1, 6, 4);
+        const sphereMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+        scene.add(sphere);
+
+        // Création des buts
+        const cubeGeometry = new THREE.BoxGeometry(1.75, 5, 5);
+        const cubeMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+
+        // But de droite
+        const cubeRightBut = new THREE.Mesh(cubeGeometry, cubeMaterial);
+        cubeRightBut.position.set(14, 2.5, 0);
+        scene.add(cubeRightBut);
+
+        // But de gauche
+        const cubeLeftBut = new THREE.Mesh(cubeGeometry, cubeMaterial);
+        cubeLeftBut.position.set(-14, 2.5, 0);
+        scene.add(cubeLeftBut);
+
+        // Liste des cubes joueurs et colliders
+        const players = {};
+        const colliders = {};
+
+
+        // Création de cubes pour chaque joueur avec un collider
+        function createPlayerCube(player) {
+            const geometry = new THREE.BoxGeometry(1, 1, 1);
+            const material = new THREE.MeshBasicMaterial({ color: player.color });
+            const cube = new THREE.Mesh(geometry, material);
+            cube.position.set(player.x, player.y, player.z);
+            scene.add(cube);
+
+
+            // Créer un collider (bounding box) pour ce cube
+            const collider = new THREE.Box3().setFromObject(cube);
+            colliders[player.id] = collider;
+
+
+            return cube;
+        }
+
+        // Initialisation des joueurs lorsque la connexion est établie
+        socket.on('init', (serverPlayers) => {
+            for (let id in serverPlayers) {
+                players[id] = createPlayerCube(serverPlayers[id]);
+            }
+        });
+
+
+        // Ajout d'un nouveau joueur
+        socket.on('newPlayer', (player) => {
+            players[player.id] = createPlayerCube(player);
+        });
+
+
+        // Mise à jour de la position des joueurs et des colliders
+        socket.on('playerMoved', (player) => {
+            if (players[player.id]) {
+                players[player.id].position.set(player.x, player.y, player.z);
+
+
+                // Mettre à jour le collider du joueur déplacé
+                colliders[player.id].setFromObject(players[player.id]);
+            }
+        });
+
+
+        // Suppression d'un joueur déconnecté
+        socket.on('playerDisconnected', (id) => {
+            if (players[id]) {
+                scene.remove(players[id]);
+                delete players[id];
+                delete colliders[id]; // Supprimer également le collider
+            }
+        });
+
+
+        // Contrôle du joueur local (utilisation des touches de direction)
+        const moveSpeed = 0.1;
+        document.addEventListener('keydown', (event) => {
+            const player = players[socket.id];
+            if (player) {
+                let prevPosition = player.position.clone(); // Stocker l'ancienne position
+
+
+                if (event.key === 'ArrowUp') player.position.z -= moveSpeed;
+                if (event.key === 'ArrowDown') player.position.z += moveSpeed;
+                if (event.key === 'ArrowLeft') player.position.x -= moveSpeed;
+                if (event.key === 'ArrowRight') player.position.x += moveSpeed;
+
+
+                // Mettre à jour le collider du joueur
+                colliders[socket.id].setFromObject(player);
+
+
+                // Vérifier les collisions avec les autres joueurs
+                let collisionDetected = false;
+                for (let id in colliders) {
+                    if (id !== socket.id && colliders[socket.id].intersectsBox(colliders[id])) {
+                        collisionDetected = true;
+                        break;
+                    }
+                }
+
+
+                // Si collision, annuler le mouvement
+                if (collisionDetected) {
+                    player.position.copy(prevPosition);
+                } else {
+                    // Envoi des nouvelles positions au serveur uniquement si pas de collision
+                    socket.emit('move', { x: player.position.x, z: player.position.z });
+                }
+            }
+        });
+
+
+        // Positionnement de la caméra
+        camera.position.set(0, 20, 20);
+        camera.lookAt(0, 0, 0);
+
+
+        // Fonction de rendu
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
+        animate();
+    </script>
+</body>
+
+</html>
