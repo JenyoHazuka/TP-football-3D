@@ -87,7 +87,12 @@
         // Liste des cubes joueurs et colliders
         const players = {};
         const colliders = {};
-
+        const wallColliders = {
+            frontWall: new THREE.Box3().setFromObject(frontWall),
+            backWall: new THREE.Box3().setFromObject(backWall),
+            rightWall: new THREE.Box3().setFromObject(rightWall),
+            leftWall: new THREE.Box3().setFromObject(leftWall)
+        };
 
         // Création de cubes pour chaque joueur avec un collider
         function createPlayerCube(player) {
@@ -104,6 +109,18 @@
 
 
             return cube;
+        }
+
+        function playerWallCollision(player, prevPosition) {
+            const playerBoundingBox = colliders[socket.id];
+
+            for (let wall in wallColliders) {
+                if (playerBoundingBox.intersectsBox(wallColliders[wall])) {
+                    // Si le joueur touche un mur, revenir à la position précédente
+                    player.position.copy(prevPosition);
+                    return;
+                }
+            }
         }
 
         // Initialisation des joueurs lorsque la connexion est établie
@@ -174,6 +191,9 @@
                 if (collisionDetected) {
                     player.position.copy(prevPosition);
                 } else {
+                    // Vérifier les collisions avec les murs
+                    checkPlayerWallCollisions(player, prevPosition);
+
                     // Envoi des nouvelles positions au serveur uniquement si pas de collision
                     socket.emit('move', { x: player.position.x, z: player.position.z });
                 }
