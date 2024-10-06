@@ -18,6 +18,14 @@ app.use(express.static(__dirname + '/public'));
 // Variable pour stocker les joueurs connectés, chaque joueur sera identifié par un ID unique
 let players = {};
 
+// Position de la sphère (exemple)
+const sphere = {
+    x: 0,
+    y: 0,
+    z: 5,
+    radius: 1
+};
+
 // Gestion des événements lorsqu'un utilisateur se connecte au serveur
 io.on('connection', (socket) => {
     console.log('Nouvel utilisateur connecté :', socket.id);
@@ -45,6 +53,13 @@ io.on('connection', (socket) => {
         players[socket.id].x = data.x;
         players[socket.id].z = data.z;
 
+        // Vérifier la collision avec la sphère
+        if (isColliding(players[socket.id], sphere)) {
+          // Annuler le mouvement ou appliquer une autre logique (par exemple, rebondir)
+          players[socket.id].x = prevX;
+          players[socket.id].z = prevZ;
+        }
+
         // Envoyer les nouvelles coordonnées du joueur à tous les autres joueurs connectés
         socket.broadcast.emit('playerMoved', players[socket.id]);
     });
@@ -61,7 +76,16 @@ io.on('connection', (socket) => {
     });
 });
 
+function isColliding(player, sphere) {
+    const distance = Math.sqrt(
+      Math.pow(player.x - sphere.x, 2) +
+      Math.pow(player.y - sphere.y, 2) +
+      Math.pow(player.z - sphere.z, 2)
+    );
+    return distance <= player.radius + sphere.radius; // Ajuster les rayons si nécessaire
+  }
+
 // Le serveur écoute les connexions sur le port 3000
-server.listen(3000, () => {
-    console.log('Serveur démarré sur le port 3000');
+server.listen(3001, () => {
+    console.log('Serveur démarré sur le port 3001');
 });

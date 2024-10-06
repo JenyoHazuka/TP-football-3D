@@ -64,11 +64,20 @@
         rightWall.position.set(15, 2.5, 0);
         scene.add(rightWall);
 
-        // Création d'une sphère
         const sphereGeometry = new THREE.SphereGeometry(1, 6, 4);
         const sphereMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
         const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
         scene.add(sphere);
+
+        const ball = {}
+        const colliders = {};
+
+        // Création d'une sphère
+        //function createBall(ball){
+
+        //    const collider = new THREE.Box3().setFromObject(sphere);
+        //    colliders[ball.id] = collider;
+        //}
 
         // Création des buts
         const cubeGeometry = new THREE.BoxGeometry(1.75, 5, 5);
@@ -86,7 +95,7 @@
 
         // Liste des cubes joueurs et colliders
         const players = {};
-        const colliders = {};
+        
 
 
         // Création de cubes pour chaque joueur avec un collider
@@ -167,6 +176,11 @@
                         collisionDetected = true;
                         break;
                     }
+                }
+
+                // Vérifier la collision avec la sphère (ajoute ici)
+                if (!collisionDetected && colliders[socket.id].intersectsBox(sphere.geometry.boundingBox)) {
+                    collisionDetected = true;
                 }
 
 
