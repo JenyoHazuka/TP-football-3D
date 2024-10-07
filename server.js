@@ -55,9 +55,9 @@ io.on('connection', (socket) => {
 
         // Vérifier la collision avec la sphère
         if (isColliding(players[socket.id], sphere)) {
-          // Annuler le mouvement ou appliquer une autre logique (par exemple, rebondir)
-          players[socket.id].x = prevX;
-          players[socket.id].z = prevZ;
+            // Annuler le mouvement ou appliquer une autre logique (par exemple, rebondir)
+            players[socket.id].x = prevX;
+            players[socket.id].z = prevZ;
         }
 
         // Envoyer les nouvelles coordonnées du joueur à tous les autres joueurs connectés
@@ -78,12 +78,12 @@ io.on('connection', (socket) => {
 
 function isColliding(player, sphere) {
     const distance = Math.sqrt(
-      Math.pow(player.x - sphere.x, 2) +
-      Math.pow(player.y - sphere.y, 2) +
-      Math.pow(player.z - sphere.z, 2)
+        Math.pow(player.x - sphere.x, 2) +
+        Math.pow(player.y - sphere.y, 2) +
+        Math.pow(player.z - sphere.z, 2)
     );
     return distance <= player.radius + sphere.radius; // Ajuster les rayons si nécessaire
-  }
+}
 
 // Le serveur écoute les connexions sur le port 3000
 server.listen(3001, () => {
