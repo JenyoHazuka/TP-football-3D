@@ -18,13 +18,73 @@ app.use(express.static(__dirname + '/public'));
 // Variable pour stocker les joueurs connectés, chaque joueur sera identifié par un ID unique
 let players = {};
 
-// Position de la sphère (exemple)
-const sphere = {
+// Variables pour stocker la position et la vitesse de la balle
+let ball = {
     x: 0,
-    y: 0,
-    z: 5,
-    radius: 1
+    y: 1, // Position Y (au-dessus du sol)
+    z: 0,
+    velocityX: 0, // Vitesse initiale en X
+    velocityZ: 0  // Vitesse initiale en Z
 };
+
+// Variables pour les positions des buts
+const leftGoalPosition = -14;  // Position X du but gauche
+const rightGoalPosition = 14;  // Position X du but droit
+
+// Position initiale de la balle
+const initialBallPosition = {
+    x: 0,
+    y: 1, // pour être sur le sol
+    z: 0
+};
+
+// Fonction pour réinitialiser la balle au centre
+function resetBall() {
+    ball.x = initialBallPosition.x;
+    ball.y = initialBallPosition.y;
+    ball.z = initialBallPosition.z;
+    ball.velocityX = 0;
+    ball.velocityZ = 0;
+
+    // Envoyer la position de la balle à tous les clients
+    io.emit('ballPosition', ball);
+}
+
+// Intervalle pour mettre à jour la position de la balle et envoyer les informations aux clients
+setInterval(() => {
+    // Mise à jour de la position de la balle en fonction de sa vélocité
+    ball.x += ball.velocityX;
+    ball.z += ball.velocityZ;
+
+    // Appliquer une légère décélération (simule la friction)
+    ball.velocityX *= 0.99;
+    ball.velocityZ *= 0.99;
+
+    // Limiter la balle pour qu'elle ne sorte pas des murs (rebond)
+    if (ball.x <= -14 || ball.x >= 14) {
+        ball.velocityX = -ball.velocityX;
+    }
+    if (ball.z <= -9 || ball.z >= 9) {
+        ball.velocityZ = -ball.velocityZ;
+    }
+
+    // Détection des buts
+    // Remplacez ces valeurs par celles correspondant à vos buts
+    const leftGoalXMin = -15; // limite gauche
+    const leftGoalXMax = -12; // limite droite
+    const rightGoalXMin = 12;  // limite gauche
+    const rightGoalXMax = 15;  // limite droite
+
+    // Vérifier si la balle est dans la zone des buts
+    if ((ball.x >= leftGoalXMin && ball.x <= leftGoalXMax && ball.z <= 5 && ball.z >= -5) ||
+        (ball.x >= rightGoalXMin && ball.x <= rightGoalXMax && ball.z <= 5 && ball.z >= -5)) {
+        console.log('But marqué!');
+        resetBall();  // Réinitialiser la balle après un but
+    }
+
+    // Envoyer la position actuelle de la balle à tous les clients
+    io.emit('ballPosition', ball);
+}, 16); // Environ 60 fois par seconde
 
 // Gestion des événements lorsqu'un utilisateur se connecte au serveur
 io.on('connection', (socket) => {
@@ -36,7 +96,7 @@ io.on('connection', (socket) => {
     players[socket.id] = {
         id: socket.id, // ID unique pour identifier le joueur
         x: Math.random() * 10 - 5, // Position X du joueur (aléatoire)
-        y: 0, // Position Y (0 car les joueurs sont sur le sol)
+        y: 1, // Position Y (1 car les joueurs sont sur le sol)
         z: Math.random() * 10 - 5, // Position Z du joueur (aléatoire)
         color: '#' + Math.floor(Math.random() * 16777215).toString(16) // Couleur aléatoire
     };
@@ -64,6 +124,16 @@ io.on('connection', (socket) => {
         socket.broadcast.emit('playerMoved', players[socket.id]);
     });
 
+    // Lorsqu'un joueur entre en collision avec la balle, il envoie l'information au serveur
+    socket.on('ballCollision', (collisionData) => {
+        // Mettre à jour la vitesse de la balle en fonction de la collision
+        ball.velocityX = collisionData.velocityX;
+        ball.velocityZ = collisionData.velocityZ;
+
+        // Envoyer la nouvelle position et la vitesse de la balle à tous les clients
+        io.emit('ballPosition', ball);
+    });
+
     // Gestion de la déconnexion d'un joueur
     socket.on('disconnect', () => {
         console.log('Utilisateur déconnecté :', socket.id);
@@ -74,6 +144,7 @@ io.on('connection', (socket) => {
         // Informer tous les autres joueurs qu'un joueur s'est déconnecté
         io.emit('playerDisconnected', socket.id);
     });
+
 });
 
 function isColliding(player, sphere) {
@@ -86,6 +157,6 @@ function isColliding(player, sphere) {
 }
 
 // Le serveur écoute les connexions sur le port 3000
-server.listen(3001, () => {
-    console.log('Serveur démarré sur le port 3001');
+server.listen(3000, () => {
+    console.log('Serveur démarré sur le port 3000');
 });

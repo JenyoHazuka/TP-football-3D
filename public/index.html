@@ -62,10 +62,11 @@
         rightWall.position.set(15, 2.5, 0);
         scene.add(rightWall);
 
-        // Création d'une sphère
+        // Création d'une sphère (la balle)
         const sphereGeometry = new THREE.SphereGeometry(1, 6, 4);
         const sphereMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
         const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+        sphere.velocity = new THREE.Vector3(0, 0, 0); // Ajout de la mouvement de la balle
         scene.add(sphere);
 
         // Création des buts
@@ -91,9 +92,7 @@
             rightWall: new THREE.Box3().setFromObject(rightWall),
             leftWall: new THREE.Box3().setFromObject(leftWall)
         };
-        const ballColliders = {
-            ball: new THREE.Box3().setFromObject(sphere)
-        };
+        const ballCollider = new THREE.Box3().setFromObject(sphere);
 
         // Création de cubes pour chaque joueur avec un collider
         function createPlayerCube(player) {
@@ -127,13 +126,22 @@
         function playerBallCollision(player, prevPosition) {
             const playerBoundingBox = colliders[socket.id];
 
-            for (let ball in ballColliders) {
-                if (playerBoundingBox.intersectsBox(ballColliders[ball])) {
-                    // Si le joueur touche la balle, revenir à la position précédente
-                    player.position.copy(prevPosition);
-                    colliders[socket.id].setFromObject(player); // Réajuster le collider après la correction de position
-                    return true; // Retourner "true" pour indiquer qu'une collision a eu lieu
-                }
+            if (playerBoundingBox.intersectsBox(ballCollider)) {
+                // Calcul du vecteur de collision
+                const collisionVector = new THREE.Vector3().subVectors(sphere.position, player.position).normalize();
+
+                // Calculer une nouvelle vélocité pour la balle en fonction de la collision
+                const forceMagnitude = 0.25;
+                const newVelocityX = collisionVector.x * forceMagnitude;
+                const newVelocityZ = collisionVector.z * forceMagnitude;
+
+                // Envoyer l'information de collision au serveur
+                socket.emit('ballCollision', { velocityX: newVelocityX, velocityZ: newVelocityZ });
+
+                // Réajuster la position du joueur pour annuler le déplacement
+                player.position.copy(prevPosition);
+                colliders[socket.id].setFromObject(player); // Réajuster le collider après la correction de position
+                return true; // Retourner "true" pour indiquer qu'une collision a eu lieu
             }
             return false;
         }
@@ -167,6 +175,12 @@
                 delete players[id];
                 delete colliders[id]; // Supprimer également le collider
             }
+        });
+
+        // Recevoir la position et la vitesse de la balle depuis le serveur
+        socket.on('ballPosition', (serverBall) => {
+            // Mettre à jour la position de la balle localement
+            sphere.position.set(serverBall.x, serverBall.y, serverBall.z);
         });
 
         // Contrôle du joueur local (utilisation des touches de direction)
@@ -204,18 +218,24 @@
                     // Vérifier les collisions avec la balle
                     const ballCollision = playerBallCollision(player, prevPosition);
 
-                    if (!wallCollision) {
-                        // Envoi des nouvelles positions au serveur uniquement si pas de collision
-                        socket.emit('move', { x: player.position.x, z: player.position.z });
-                    }
-
-                    if (!ballCollision) {
+                    if (!wallCollision && !ballCollision) {
                         // Envoi des nouvelles positions au serveur uniquement si pas de collision
                         socket.emit('move', { x: player.position.x, z: player.position.z });
                     }
                 }
             }
         });
+
+        // Mise à jour de la position de la balle en fonction de son mouvement
+        function updateBallPosition() {
+            sphere.position.add(sphere.velocity);
+
+            // Appliquer un léger frein pour simuler la résistance (décélération)
+            sphere.velocity.multiplyScalar(0.98);
+
+            // Mettre à jour le collider de la balle
+            ballCollider.setFromObject(sphere);
+        }
 
         // Positionnement de la caméra
         camera.position.set(0, 20, 20);
@@ -224,6 +244,10 @@
         // Fonction de rendu
         function animate() {
             requestAnimationFrame(animate);
+
+            // Mise à jour de la position de la balle
+            updateBallPosition();
+
             renderer.render(scene, camera);
         }
         animate();
